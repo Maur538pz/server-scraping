@@ -1,4 +1,5 @@
 const app = require("express")();
+const cors = require("cors")
 
 let chrome = {};
 let puppeteer;
@@ -10,8 +11,13 @@ if (process.env.AWS_LAMBDA_FUNCTION_VERSION) {
   puppeteer = require("puppeteer");
 }
 
-app.get("/api", async (req, res) => {
+app.use(cors())
+
+app.get("/api/:site", async (req, res) => {
+  let dep = req.params.site
+  const departmentMin = dep.toLowerCase();
   let options = {};
+  const url = `https://www.pods.pe/mapa/lista.php?reg=${departmentMin}&ods=15&tem=undefined&tip=undefined`;
 
   if (process.env.AWS_LAMBDA_FUNCTION_VERSION) {
     options = {
@@ -27,8 +33,37 @@ app.get("/api", async (req, res) => {
     let browser = await puppeteer.launch(options);
 
     let page = await browser.newPage();
-    await page.goto("https://www.google.com");
-    res.send(await page.title());
+
+
+
+
+    await page.goto(url);
+
+    let response = await page.evaluate(() => {
+      const numIniciativas = Number(
+        document.querySelector('.num > span').innerText,
+      );
+      if (!numIniciativas) {
+        return [];
+      }
+      const campos = [
+        ...document.querySelectorAll('thead > tr > :not(.sep)'),
+      ].map((e) => e.innerText);
+
+      const nodeContent= document.querySelectorAll('tbody > tr');
+
+      const content = [...nodeContent].map((e) =>
+        [...e.querySelectorAll(':not(.sep)')]
+          .map((td) => td.innerText)
+          .slice(1),
+      );
+
+      return [campos, ...content];
+    });
+    await browser.close()
+
+
+    res.send(response);
   } catch (err) {
     console.error(err);
     return null;
